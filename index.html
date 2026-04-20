@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAP Math Pro - Missing Number Challenge (PeerJS)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@500&display=swap');
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: radial-gradient(circle at top left, #020617, #0f172a, #1e1b4b);
+            color: #f8fafc;
+            height: 100vh;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        .font-heading { font-family: 'Space Grotesk', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        .glass-morphism {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .neon-border-cyan {
+            border: 1px solid rgba(34, 211, 238, 0.4);
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.15);
+        }
+
+        .math-card {
+            background: rgba(0,0,0,0.4);
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        /* Update Grid Monitor: mengecil otomatis jika siswa banyak */
+        .monitor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.75rem;
+            padding: 1rem;
+            overflow-y: auto;
+            align-content: start;
+        }
+
+        @media (min-width: 1280px) {
+            .monitor-grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            }
+        }
+
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1em;
+        }
+
+        select:disabled { opacity: 0.8; cursor: not-allowed; background-image: none; }
+
+        .animate-pop { animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes pop { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+        .correct-flash { animation: success-pulse 0.5s ease; }
+        @keyframes success-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            70% { box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="flex h-screen max-w-[1920px] mx-auto w-full p-2 md:p-4 overflow-hidden">
+        <div class="flex-1 flex flex-col min-w-0">
+            <!-- Header -->
+            <header class="flex-shrink-0 flex items-center justify-between mb-4 px-2">
+                <div class="flex items-center space-x-3">
+                    <div class="p-1.5 glass-morphism rounded-xl neon-border-cyan">
+                        <i data-lucide="brain-circuit" class="w-6 h-6 text-cyan-400"></i>
+                    </div>
+                    <div class="flex flex-col">
+                        <h1 class="text-xl font-black font-heading bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-indigo-400 leading-tight">
+                            CAP MISSING NUMBER
+                        </h1>
+                        <span class="text-[8px] uppercase tracking-[0.3em] text-slate-500 font-bold">PEER-TO-PEER NETWORK</span>
+                    </div>
+                </div>
+                <div id="connection-status" class="hidden glass-morphism px-4 py-2 rounded-xl border border-emerald-500/20 flex items-center space-x-3">
+                    <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_#10b981]"></div>
+                    <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Sesi Aktif (<span id="global-count">0</span> Peserta)</span>
+                </div>
+            </header>
+
+            <div class="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
+                <!-- Sidebar Kiri -->
+                <div class="lg:w-64 flex flex-col space-y-4 flex-shrink-0">
+                    <div class="glass-morphism p-5 rounded-[2rem] border-t border-white/5 flex flex-col overflow-hidden">
+                        <h2 class="text-[9px] font-black text-cyan-400 uppercase tracking-[0.4em] mb-4">Akses Sesi</h2>
+                        
+                        <div id="init-form" class="space-y-4">
+                            <div class="flex p-1 bg-black/40 rounded-xl mb-2">
+                                <button id="btn-tab-user" onclick="setMode('user')" class="flex-1 text-cyan-400 bg-white/5 rounded-lg py-2 text-[9px] font-bold uppercase tracking-widest">Siswa</button>
+                                <button id="btn-tab-admin" onclick="promptAdmin()" class="flex-1 text-slate-500 py-2 text-[9px] font-bold uppercase tracking-widest">Guru</button>
+                            </div>
+
+                            <div id="user-form" class="space-y-3">
+                                <input type="text" id="user-name" maxlength="15" placeholder="NAMA SISWA" class="w-full bg-black/40 text-white text-xs p-3 rounded-xl border border-white/5 focus:outline-none uppercase">
+                                <input type="text" id="room-id" placeholder="ID RUANG GURU" class="w-full bg-black/40 text-white text-xs p-3 rounded-xl border border-white/5 focus:outline-none uppercase">
+                                <button id="btn-join" onclick="joinRoom()" class="w-full bg-gradient-to-r from-cyan-600 to-indigo-600 text-white py-3 rounded-xl font-bold text-[10px] uppercase tracking-[0.2em]">GABUNG</button>
+                            </div>
+
+                            <div id="admin-form" class="space-y-3 hidden">
+                                <input type="text" id="admin-name" placeholder="NAMA GURU" class="w-full bg-indigo-900/10 text-white text-xs p-3 rounded-xl border border-indigo-500/20 focus:outline-none uppercase">
+                                <input type="text" id="admin-room-id" placeholder="KODE RUANG" class="w-full bg-indigo-900/10 text-white text-xs p-3 rounded-xl border border-indigo-500/20 focus:outline-none uppercase">
+                                <button id="btn-create" onclick="createRoom()" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-bold text-[10px] uppercase tracking-[0.2em]">BUAT RUANG</button>
+                            </div>
+                        </div>
+
+                        <!-- Kontrol Guru -->
+                        <div id="active-controls" class="hidden flex-1 flex flex-col space-y-4 overflow-y-auto pr-1">
+                            <div id="admin-tools" class="hidden space-y-4">
+                                <div class="bg-indigo-500/5 p-4 rounded-2xl border border-indigo-500/10 space-y-3">
+                                    <h3 class="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Panel Guru</h3>
+                                    
+                                    <div>
+                                        <label class="text-[7px] text-slate-500 uppercase block mb-1">Daftar Persamaan (Satu baris satu soal)</label>
+                                        <textarea id="target-numbers-input" class="w-full bg-black/40 text-white text-[10px] p-3 rounded-xl border border-white/10 outline-none h-32 resize-none font-mono" placeholder="5 + ___ = 12&#10;20 ÷ ___ = 4&#10;6 x ___ = 30&#10;60 - ___ = 20"></textarea>
+                                    </div>
+
+                                    <div>
+                                        <label class="text-[7px] text-slate-500 uppercase block mb-1">Durasi (Detik)</label>
+                                        <input type="number" id="quiz-duration" value="120" min="10" class="w-full bg-black/40 text-white text-xs p-2 rounded-lg border border-white/10 outline-none">
+                                    </div>
+
+                                    <button onclick="startChallenge()" class="w-full bg-emerald-600 py-3 rounded-xl hover:bg-emerald-500 text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
+                                        <i data-lucide="send" class="w-3 h-3 text-white"></i> KIRIM SOAL KE SEMUA
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="bg-black/40 p-4 rounded-xl border border-white/5">
+                                <label class="text-[7px] text-slate-500 uppercase block mb-1">ID RUANG ANDA</label>
+                                <div class="flex items-center justify-between">
+                                    <span id="my-peer-id" class="font-mono text-[10px] font-bold text-cyan-400 tracking-wider">...</span>
+                                    <button onclick="copyId()" class="text-slate-500 hover:text-white"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                                </div>
+                            </div>
+                            <button onclick="location.reload()" class="w-full border border-red-500/30 text-red-400 py-2 rounded-xl text-[8px] font-bold uppercase tracking-widest">KELUAR</button>
+                        </div>
+                    </div>
+
+                    <!-- Statistik Lokal (Siswa) -->
+                    <div id="local-stats" class="hidden glass-morphism p-5 rounded-[2rem] space-y-4 border-t border-white/5">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="bg-black/30 p-2 rounded-xl text-center">
+                                <div class="text-[7px] text-slate-500 uppercase font-bold">Benar</div>
+                                <div id="live-correct" class="text-lg font-black text-emerald-400">0</div>
+                            </div>
+                            <div class="bg-black/30 p-2 rounded-xl text-center">
+                                <div class="text-[7px] text-slate-500 uppercase font-bold">Skor</div>
+                                <div id="live-score" class="text-lg font-black text-indigo-400">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Display Utama -->
+                <div class="flex-1 flex flex-col md:flex-row gap-4 min-h-0">
+                    <div class="flex-1 glass-morphism rounded-[2.5rem] border border-white/5 flex flex-col overflow-hidden relative">
+                        <!-- LOBBY -->
+                        <div id="lobby-state" class="absolute inset-0 flex flex-col items-center justify-center text-center p-8 z-10">
+                            <div class="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-6 border border-white/10 animate-pulse">
+                                <i data-lucide="network" class="w-8 h-8 text-slate-400"></i>
+                            </div>
+                            <h3 id="status-display-text" class="text-lg font-black text-slate-300 font-heading uppercase tracking-widest mb-2">P2P Network Lobby</h3>
+                            <p class="text-[10px] text-slate-500 uppercase tracking-tight">Koneksi langsung antar perangkat...</p>
+                        </div>
+
+                        <!-- MATH ENGINE (Siswa) -->
+                        <div id="math-engine" class="hidden h-full flex flex-col p-6 md:p-10">
+                            <div class="flex items-center justify-between mb-8">
+                                <div class="flex items-center gap-6">
+                                    <div>
+                                        <p class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Sisa Waktu</p>
+                                        <p id="timer-display" class="text-3xl font-black font-heading text-white">00:00</p>
+                                    </div>
+                                    <div class="h-10 w-[1px] bg-white/10"></div>
+                                    <div>
+                                        <p class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Progres</p>
+                                        <p id="progress-display" class="text-3xl font-black font-heading text-indigo-400">0/0</p>
+                                    </div>
+                                    <div class="h-10 w-[1px] bg-white/10"></div>
+                                    <div class="text-center px-4 py-2 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
+                                        <p class="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-1">Target</p>
+                                        <p id="target-display" class="text-4xl font-black font-heading text-white">0</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p id="op-display-text" class="text-2xl font-black font-heading text-indigo-400">+</p>
+                                    <p class="text-[7px] text-slate-500 uppercase font-bold">OPERASI</p>
+                                </div>
+                            </div>
+
+                            <div id="play-area" class="flex-1 flex flex-col items-center justify-center">
+                                <div id="game-container" class="math-card w-full max-w-xl flex flex-col items-center gap-8">
+                                    <div class="flex flex-wrap items-center justify-center gap-6 text-3xl font-bold">
+                                        <div class="flex flex-col items-center gap-3">
+                                            <span class="text-[9px] text-slate-500 uppercase font-black">Diketahui</span>
+                                            <div id="val-fixed" class="bg-black/60 border border-white/20 rounded-2xl px-8 py-5 text-white font-mono min-w-[100px] text-center">0</div>
+                                        </div>
+
+                                        <div class="mt-8 text-indigo-400 font-mono text-4xl" id="op-symbol-display">+</div>
+
+                                        <div class="flex flex-col items-center gap-3">
+                                            <span class="text-[9px] text-cyan-400 uppercase font-black">Angka Hilang</span>
+                                            <select id="missing-num-input" class="bg-indigo-600/20 border-2 border-cyan-500/50 rounded-2xl px-6 py-5 text-white outline-none focus:border-cyan-400 font-mono min-w-[120px] text-center text-3xl"></select>
+                                        </div>
+
+                                        <div class="mt-8 text-white font-mono text-4xl">=</div>
+
+                                        <div class="flex flex-col items-center gap-3">
+                                            <span class="text-[9px] text-slate-500 uppercase font-black">Target</span>
+                                            <div id="val-target-eq" class="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl px-8 py-5 text-emerald-400 font-mono min-w-[100px] text-center">0</div>
+                                        </div>
+                                    </div>
+
+                                    <button id="btn-submit" onclick="submitAnswer()" class="w-full max-w-xs bg-gradient-to-r from-cyan-600 to-indigo-600 py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 transition-all">
+                                        KIRIM JAWABAN
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="finish-badge" class="hidden mt-4 p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-center">
+                                <span id="finish-text" class="text-xs font-black text-emerald-400 uppercase tracking-widest">SEMUA SELESAI - MENUNGGU GURU</span>
+                            </div>
+                        </div>
+
+                        <!-- MONITOR GURU -->
+                        <div id="admin-monitor" class="hidden h-full flex flex-col overflow-hidden">
+                            <div class="p-4 border-b border-white/5 flex items-center justify-between bg-black/20 flex-shrink-0">
+                                <div class="flex items-center gap-6">
+                                    <h3 class="text-[10px] font-black text-white uppercase tracking-widest">Monitor Progres Siswa</h3>
+                                    <div id="admin-timer-container" class="hidden flex items-center gap-2 bg-indigo-500/10 px-3 py-1 rounded-xl border border-indigo-500/20">
+                                        <i data-lucide="clock" class="w-3 h-3 text-indigo-400"></i>
+                                        <span id="admin-timer-display" class="font-mono text-xs font-black text-indigo-400 tracking-wider">00:00</span>
+                                    </div>
+                                </div>
+                                <button onclick="exportCSV()" class="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 text-[8px] font-bold uppercase rounded-lg border border-emerald-500/20">Download CSV</button>
+                            </div>
+                            <!-- GRID YANG DAPAT DISCROLL -->
+                            <div id="monitor-grid" class="monitor-grid flex-1"></div>
+                        </div>
+                    </div>
+
+                    <!-- Papan Skor -->
+                    <div id="leaderboard-panel" class="hidden w-full md:w-64 glass-morphism rounded-[2.5rem] border border-white/5 flex flex-col p-6">
+                        <h2 class="text-[9px] font-black text-yellow-500 uppercase tracking-[0.4em] mb-6 flex items-center gap-2">
+                            <i data-lucide="trophy" class="w-4 h-4"></i> Leaderboard
+                        </h2>
+                        <div id="global-rank-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 glass-morphism px-6 py-3 rounded-2xl text-[9px] font-black tracking-widest text-white opacity-0 transition-all pointer-events-none z-[200] border-cyan-500/30 uppercase"></div>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="password-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/90 backdrop-blur-md">
+        <div class="glass-morphism p-8 rounded-3xl w-72 border border-white/10 animate-pop">
+            <h3 class="text-xs font-black text-white text-center uppercase tracking-widest mb-4">Otorisasi Guru</h3>
+            <input type="password" id="admin-pw" class="w-full bg-black/40 text-white text-center text-sm p-3 rounded-xl border border-white/10 focus:border-indigo-500 mb-4 outline-none" placeholder="PASSWORD">
+            <div class="flex gap-2">
+                <button onclick="closePasswordModal()" class="flex-1 py-2 text-[9px] font-bold text-slate-400">BATAL</button>
+                <button onclick="verifyAdmin()" class="flex-1 bg-indigo-600 text-white py-2 text-[9px] font-bold rounded-xl">LOGIN</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let peer = null;
+        let myId = null;
+        let myAlias = "";
+        let connections = {};
+        let isAdmin = false;
+        let participantsData = {};
+
+        // Game State
+        let targetList = [];
+        let knownNumbers = []; 
+        let operatorList = []; 
+        let currentTargetIndex = 0;
+        let score = 0;
+        let correctCount = 0;
+        let isActive = false;
+        let timerInterval = null;
+
+        function notify(text) {
+            const t = document.getElementById('toast');
+            if (!t) return;
+            t.innerText = text;
+            t.style.opacity = "1";
+            t.style.transform = "translate(-50%, -10px)";
+            setTimeout(() => { 
+                if (t) {
+                    t.style.opacity = "0"; 
+                    t.style.transform = "translate(-50%, 0)"; 
+                }
+            }, 2500);
+        }
+
+        function setMode(mode) {
+            const userTab = document.getElementById('btn-tab-user');
+            const adminTab = document.getElementById('btn-tab-admin');
+            const userForm = document.getElementById('user-form');
+            const adminForm = document.getElementById('admin-form');
+            if (mode === 'admin') {
+                userTab.className = "flex-1 text-slate-500 py-2 text-[9px] font-bold uppercase tracking-widest";
+                adminTab.className = "flex-1 text-indigo-400 bg-white/5 rounded-lg py-2 text-[9px] font-bold uppercase tracking-widest";
+                userForm.classList.add('hidden');
+                adminForm.classList.remove('hidden');
+            } else {
+                adminTab.className = "flex-1 text-slate-500 py-2 text-[9px] font-bold uppercase tracking-widest";
+                userTab.className = "flex-1 text-cyan-400 bg-white/5 rounded-lg py-2 text-[9px] font-bold uppercase tracking-widest";
+                adminForm.classList.add('hidden');
+                userForm.classList.remove('hidden');
+            }
+        }
+
+        function promptAdmin() {
+            document.getElementById('password-modal').classList.remove('hidden');
+            document.getElementById('password-modal').classList.add('flex');
+            document.getElementById('admin-pw').focus();
+        }
+
+        function closePasswordModal() {
+            document.getElementById('password-modal').classList.add('hidden');
+            document.getElementById('password-modal').classList.remove('flex');
+        }
+
+        function verifyAdmin() {
+            if (document.getElementById('admin-pw').value === 'mataharisaja') {
+                isAdmin = true;
+                setMode('admin');
+                closePasswordModal();
+                notify("LOGIN GURU BERHASIL");
+            } else {
+                notify("PASSWORD SALAH");
+            }
+        }
+
+        function populateSelectors() {
+            const sel = document.getElementById('missing-num-input');
+            if (!sel) return;
+            sel.innerHTML = '';
+            sel.add(new Option("?", ""));
+            for(let i=0; i<=500; i++) {
+                sel.add(new Option(i, i));
+            }
+        }
+
+        function initPeer(id, asAdmin, targetRoom = null) {
+            if (peer) peer.destroy();
+
+            peer = new Peer(id, {
+                debug: 1,
+                config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]}
+            });
+
+            peer.on('open', (pid) => {
+                myId = pid;
+                document.getElementById('my-peer-id').innerText = pid;
+                document.getElementById('init-form').classList.add('hidden');
+                document.getElementById('active-controls').classList.remove('hidden');
+                document.getElementById('connection-status').classList.remove('hidden');
+                document.getElementById('leaderboard-panel').classList.remove('hidden');
+                
+                if (!asAdmin) {
+                    participantsData[pid] = { alias: myAlias, score: 0, correct: 0, progress: "0/0", isFinished: false, lastCalc: "-" };
+                }
+                updateLeaderboard();
+
+                if (asAdmin) {
+                    document.getElementById('admin-monitor').classList.remove('hidden');
+                    document.getElementById('admin-tools').classList.remove('hidden');
+                    document.getElementById('lobby-state').classList.add('hidden');
+                } else {
+                    document.getElementById('local-stats').classList.remove('hidden');
+                    if (targetRoom) connectToAdmin(targetRoom);
+                }
+            });
+
+            peer.on('connection', setupConn);
+
+            peer.on('error', (err) => {
+                console.error("Peer Error:", err);
+                if (err.type === 'unavailable-id') {
+                    notify("ID TIDAK TERSEDIA");
+                } else {
+                    notify("KESALAHAN JARINGAN: " + err.type);
+                }
+            });
+        }
+
+        function createRoom() {
+            const n = document.getElementById('admin-name').value.trim();
+            const r = document.getElementById('admin-room-id').value.trim();
+            if (!n || !r) return notify("ISI DATA LENGKAP");
+            myAlias = n.toUpperCase();
+            initPeer(r.toUpperCase(), true);
+        }
+
+        function joinRoom() {
+            const n = document.getElementById('user-name').value.trim();
+            const r = document.getElementById('room-id').value.trim();
+            if (!n || !r) return notify("ISI DATA LENGKAP");
+            myAlias = n.toUpperCase();
+            initPeer(`${n.replace(/\s+/g, '')}-${Math.floor(Math.random()*999)}`, false, r.toUpperCase());
+        }
+
+        function connectToAdmin(rid) {
+            const conn = peer.connect(rid, { metadata: { alias: myAlias } });
+            setupConn(conn);
+        }
+
+        function setupConn(conn) {
+            const pid = conn.peer;
+            connections[pid] = conn;
+            conn.on('open', () => {
+                conn.send({ type: 'identity', alias: myAlias, role: isAdmin ? 'admin' : 'student' });
+                updateCount();
+            });
+            conn.on('data', (data) => {
+                if (data.type === 'identity') {
+                    if (data.role === 'student') {
+                        participantsData[pid] = { alias: data.alias, score: 0, correct: 0, progress: "0/0", isFinished: false, lastCalc: "-" };
+                        if (isAdmin) createMonitorCard(pid, data.alias);
+                    }
+                    updateCount();
+                    if (isAdmin) relayGlobalStats();
+                }
+                if (data.type === 'challenge-start') {
+                    targetList = data.targets;
+                    knownNumbers = data.knowns;
+                    operatorList = data.operators; 
+                    currentTargetIndex = 0;
+                    score = 0;
+                    correctCount = 0;
+                    startMathGame(data.duration);
+                }
+                if (data.type === 'stats-update') {
+                    if (participantsData[pid]) {
+                        participantsData[pid] = { ...participantsData[pid], ...data.stats };
+                        if (isAdmin) {
+                            updateMonitorCard(pid, data.stats);
+                            relayGlobalStats();
+                        }
+                        updateLeaderboard();
+                    }
+                }
+                if (data.type === 'global-sync') {
+                    participantsData = data.data;
+                    updateLeaderboard();
+                }
+            });
+            conn.on('close', () => {
+                delete connections[pid];
+                delete participantsData[pid];
+                const card = document.getElementById(`card-${pid}`);
+                if (card) card.remove();
+                if (isAdmin) relayGlobalStats();
+                updateLeaderboard();
+                updateCount();
+            });
+        }
+
+        function updateCount() {
+            const countElem = document.getElementById('global-count');
+            if (countElem) countElem.innerText = Object.keys(connections).length;
+        }
+
+        function relayGlobalStats() {
+            if (!isAdmin) return;
+            const msg = { type: 'global-sync', data: participantsData };
+            Object.values(connections).forEach(c => { if (c.open) c.send(msg); });
+        }
+
+        function startMathGame(dur) {
+            isActive = true;
+            document.getElementById('lobby-state').classList.add('hidden');
+            document.getElementById('math-engine').classList.remove('hidden');
+            document.getElementById('finish-badge').classList.add('hidden');
+            
+            populateSelectors();
+            updateTaskUI();
+            startTimer(dur);
+            notify("DAFTAR SOAL DITERIMA");
+        }
+
+        function updateTaskUI() {
+            const target = targetList[currentTargetIndex];
+            const known = knownNumbers[currentTargetIndex];
+            const op = operatorList[currentTargetIndex];
+            
+            const targetDisp = document.getElementById('target-display');
+            const targetEq = document.getElementById('val-target-eq');
+            const valFixed = document.getElementById('val-fixed');
+            const progDisp = document.getElementById('progress-display');
+            const opDisp = document.getElementById('op-display-text');
+            const opSymbol = document.getElementById('op-symbol-display');
+            const input = document.getElementById('missing-num-input');
+            const btn = document.getElementById('btn-submit');
+
+            if (targetDisp) targetDisp.innerText = target;
+            if (targetEq) targetEq.innerText = target;
+            if (valFixed) valFixed.innerText = known;
+            if (progDisp) progDisp.innerText = `${currentTargetIndex + 1}/${targetList.length}`;
+            
+            const symbol = op.replace('*', '×').replace('/', '÷');
+            if (opDisp) opDisp.innerText = symbol;
+            if (opSymbol) opSymbol.innerText = symbol;
+            
+            if (input) input.value = "";
+            if (btn) {
+                btn.disabled = false;
+                btn.style.opacity = "1";
+            }
+        }
+
+        function submitAnswer() {
+            if(!isActive) return;
+
+            const valFixed = knownNumbers[currentTargetIndex];
+            const valInput = parseInt(document.getElementById('missing-num-input').value);
+            const target = targetList[currentTargetIndex];
+            const op = operatorList[currentTargetIndex];
+
+            if (isNaN(valInput)) return notify("PILIH ANGKA");
+
+            let calcResult = 0;
+            switch(op) {
+                case '+': calcResult = valFixed + valInput; break;
+                case '-': calcResult = valFixed - valInput; break;
+                case '*': calcResult = valFixed * valInput; break;
+                case '/': calcResult = valInput !== 0 ? valFixed / valInput : 0; break;
+            }
+
+            const isCorrect = (calcResult === target);
+            if (isCorrect) {
+                correctCount++;
+                score += 100;
+                notify("TEPAT! +100");
+                const container = document.getElementById('game-container');
+                if (container) {
+                    container.classList.add('correct-flash');
+                    setTimeout(() => container.classList.remove('correct-flash'), 500);
+                }
+            } else {
+                notify("JAWABAN SALAH!");
+            }
+
+            const liveCorrect = document.getElementById('live-correct');
+            const liveScore = document.getElementById('live-score');
+            if (liveCorrect) liveCorrect.innerText = correctCount;
+            if (liveScore) liveScore.innerText = score;
+
+            if (participantsData[myId]) {
+                participantsData[myId].score = score;
+                participantsData[myId].correct = correctCount;
+                participantsData[myId].progress = `${currentTargetIndex + 1}/${targetList.length}`;
+                participantsData[myId].lastCalc = `${valFixed} ${op.replace('*', '×').replace('/', '÷')} ${valInput} = ${calcResult}`;
+                updateLeaderboard();
+            }
+
+            const isDone = (currentTargetIndex >= targetList.length - 1);
+            broadcastStats(isDone, valFixed, valInput, calcResult, op);
+
+            if (!isDone) {
+                currentTargetIndex++;
+                updateTaskUI();
+            } else {
+                endSession(true);
+            }
+        }
+
+        function broadcastStats(isDone, valFixed, valInput, calcResult, op) {
+            const stats = { 
+                score, 
+                correct: correctCount, 
+                progress: `${currentTargetIndex + 1}/${targetList.length}`, 
+                isFinished: isDone,
+                lastCalc: `${valFixed}${op.replace('*', '×').replace('/', '÷')}${valInput}=${calcResult}`
+            };
+            Object.values(connections).forEach(c => { if (c.open) c.send({ type: 'stats-update', stats }); });
+        }
+
+        function startTimer(sec) {
+            let left = sec;
+            const timerDispSiswa = document.getElementById('timer-display');
+            const timerDispAdmin = document.getElementById('admin-timer-display');
+            const timerContAdmin = document.getElementById('admin-timer-container');
+
+            if (isAdmin && timerContAdmin) {
+                timerContAdmin.classList.remove('hidden');
+            }
+
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                left--;
+                const m = Math.floor(left / 60).toString().padStart(2, '0');
+                const s = (left % 60).toString().padStart(2, '0');
+                
+                if (timerDispSiswa) timerDispSiswa.innerText = `${m}:${s}`;
+                if (isAdmin && timerDispAdmin) timerDispAdmin.innerText = `${m}:${s}`;
+
+                if (left <= 0) {
+                    endSession(false);
+                    if (isAdmin && timerContAdmin) timerContAdmin.classList.add('hidden');
+                }
+            }, 1000);
+        }
+
+        function endSession(isSuccess) {
+            isActive = false;
+            clearInterval(timerInterval);
+            
+            const btn = document.getElementById('btn-submit');
+            if (btn) {
+                btn.disabled = true;
+                btn.style.opacity = "0.5";
+            }
+            
+            const badge = document.getElementById('finish-badge');
+            const text = document.getElementById('finish-text');
+            if (badge) badge.classList.remove('hidden');
+            if (text) text.innerText = isSuccess ? "SEMUA SELESAI" : "WAKTU HABIS";
+            
+            const timerContAdmin = document.getElementById('admin-timer-container');
+            if (isAdmin && timerContAdmin) {
+                setTimeout(() => timerContAdmin.classList.add('hidden'), 3000);
+            }
+        }
+
+        function startChallenge() {
+            const rawInput = document.getElementById('target-numbers-input').value;
+            const dur = parseInt(document.getElementById('quiz-duration').value);
+
+            const lines = rawInput.split('\n');
+            const targets = [];
+            const knowns = [];
+            const ops = [];
+
+            const regex = /(\d+)\s*([\+\-\*\/x÷])\s*[_]+\s*=\s*(\d+)/i;
+
+            lines.forEach(line => {
+                const match = line.trim().match(regex);
+                if (match) {
+                    knowns.push(parseInt(match[1]));
+                    let op = match[2];
+                    if (op.toLowerCase() === 'x') op = '*';
+                    if (op === '÷') op = '/';
+                    ops.push(op);
+                    targets.push(parseInt(match[3]));
+                }
+            });
+
+            if (targets.length === 0) {
+                return notify("FORMAT SALAH! Contoh: 5 + ___ = 12");
+            }
+
+            Object.values(connections).forEach(c => {
+                if (c.open) c.send({ 
+                    type: 'challenge-start', 
+                    targets: targets, 
+                    knowns: knowns, 
+                    operators: ops, 
+                    duration: dur 
+                });
+            });
+
+            // Guru juga menjalankan timer secara lokal
+            startTimer(dur);
+            notify(`SOAL TERKIRIM KE ${Object.keys(connections).length} SISWA`);
+        }
+
+        // --- UPDATE FUNGSI PEMBUATAN KARTU MONITOR ---
+        function createMonitorCard(id, alias) {
+            const grid = document.getElementById('monitor-grid');
+            if (!grid || document.getElementById(`card-${id}`)) return;
+            
+            const div = document.createElement('div');
+            div.id = `card-${id}`;
+            div.className = "glass-morphism p-3 rounded-2xl border border-white/5 animate-pop flex flex-col justify-between";
+            
+            div.innerHTML = `
+                <div class="flex justify-between items-center mb-2">
+                    <p class="text-[10px] font-black text-white uppercase truncate max-w-[70%]">${alias}</p>
+                    <span id="m-prog-${id}" class="text-[8px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-lg border border-indigo-500/10">0/0</span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-1.5 mb-2">
+                    <div class="bg-black/30 p-1.5 rounded-lg text-center border border-white/5">
+                        <span class="text-[6px] text-slate-500 block uppercase font-bold">Benar</span>
+                        <span id="m-correct-${id}" class="text-[10px] font-black text-emerald-400">0</span>
+                    </div>
+                    <div class="bg-black/30 p-1.5 rounded-lg text-center border border-white/5">
+                        <span class="text-[6px] text-slate-500 block uppercase font-bold">Skor</span>
+                        <span id="m-score-${id}" class="text-[10px] font-black text-cyan-400">0</span>
+                    </div>
+                </div>
+                
+                <div class="bg-indigo-500/5 p-2 rounded-xl border border-indigo-500/10 text-center mb-2">
+                    <span class="text-[6px] text-indigo-400 block uppercase font-bold mb-0.5">Aksi Terakhir</span>
+                    <span id="m-calc-${id}" class="text-[9px] font-mono font-bold text-white/80 tracking-tight leading-none block py-1">-</span>
+                </div>
+                
+                <div class="h-1 w-full bg-white/5 rounded-full overflow-hidden flex-shrink-0">
+                    <div id="m-bar-${id}" class="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 transition-all duration-500" style="width: 0%"></div>
+                </div>
+            `;
+            grid.appendChild(div);
+        }
+
+        function updateMonitorCard(id, stats) {
+            const card = document.getElementById(`card-${id}`);
+            if(!card) return;
+            
+            if(stats.isFinished) {
+                card.style.borderColor = "rgba(16, 185, 129, 0.4)";
+                card.style.background = "rgba(16, 185, 129, 0.05)";
+            }
+            
+            const prog = document.getElementById(`m-prog-${id}`);
+            const correct = document.getElementById(`m-correct-${id}`);
+            const scoreDisp = document.getElementById(`m-score-${id}`);
+            const calc = document.getElementById(`m-calc-${id}`);
+            const bar = document.getElementById(`m-bar-${id}`);
+
+            if (prog) prog.innerText = stats.progress;
+            if (correct) correct.innerText = stats.correct;
+            if (scoreDisp) scoreDisp.innerText = stats.score;
+            if (calc && stats.lastCalc) {
+                calc.innerText = stats.lastCalc;
+            }
+            
+            if (bar) {
+                const parts = stats.progress.split('/');
+                const cur = parseInt(parts[0]);
+                const total = parseInt(parts[1]);
+                const perc = total > 0 ? (cur / total) * 100 : 0;
+                bar.style.width = `${perc}%`;
+            }
+        }
+
+        function updateLeaderboard() {
+            const list = document.getElementById('global-rank-list');
+            if (!list) return;
+            const sorted = Object.entries(participantsData)
+                .map(([id, data]) => ({ id, ...data }))
+                .sort((a, b) => b.score - a.score);
+            
+            list.innerHTML = sorted.map((p, i) => `
+                <div class="flex items-center justify-between p-3 ${p.id === myId ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-white/5 border-white/5'} rounded-2xl border animate-pop">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <span class="text-[10px] font-black ${i < 3 ? 'text-yellow-500' : 'text-slate-500'}">#${i+1}</span>
+                        <div class="overflow-hidden">
+                            <p class="text-[9px] font-bold text-white uppercase truncate">${p.alias}</p>
+                            <p class="text-[7px] text-slate-500">${p.progress} Selesai</p>
+                        </div>
+                    </div>
+                    <span class="text-[10px] font-black text-cyan-400 pl-2">${p.score}</span>
+                </div>
+            `).join('');
+        }
+
+        function copyId() {
+            const idElem = document.getElementById('my-peer-id');
+            if (!idElem) return;
+            const t = idElem.innerText;
+            const el = document.createElement('textarea');
+            el.value = t; document.body.appendChild(el);
+            el.select(); document.execCommand('copy');
+            document.body.removeChild(el);
+            notify("ID DISALIN");
+        }
+
+        function exportCSV() {
+            const s = Object.values(participantsData).sort((a,b) => b.score - a.score);
+            let csv = "Rank,Nama,Benar,Skor,Progres,Selesai,Aksi Terakhir\n";
+            s.forEach((p, i) => { csv += `${i+1},${p.alias},${p.correct},${p.score},${p.progress},${p.isFinished},${p.lastCalc}\n`; });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `Math_Results_${Date.now()}.csv`;
+            a.click();
+        }
+
+        window.onload = () => {
+            lucide.createIcons();
+        };
+    </script>
+</body>
+</html>
